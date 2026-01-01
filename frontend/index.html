@@ -1,0 +1,1668 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>培训机构课程管理系统</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="./static/lib/axios/axios.min.js"></script>
+  <link href="./static/lib/font-awesome/css/font-awesome.min.css" rel="stylesheet">
+  <style>
+    .notification {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 1rem;
+      border-radius: 4px;
+      color: white;
+      z-index: 1000;
+      transform: translateX(120%);
+      transition: transform 0.3s ease;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+    .notification.show {
+      transform: translateX(0);
+    }
+    .notification.success {
+      background-color: #10b981;
+    }
+    .notification.error {
+      background-color: #ef4444;
+    }
+    .loading {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      border: 3px solid rgba(255,255,255,.3);
+      border-radius: 50%;
+      border-top-color: white;
+      animation: spin 1s ease-in-out infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+  <!-- 导航栏 -->
+  <nav class="bg-blue-600 text-white p-4 shadow-md">
+    <div class="container mx-auto flex flex-col md:flex-row justify-between items-center">
+      <h1 class="text-2xl font-bold mb-2 md:mb-0">
+        <i class="fa fa-graduation-cap mr-2"></i>培训机构课程管理系统
+      </h1>
+      <div class="flex items-center space-x-4">
+        <div id="user-info" class="hidden md:block">
+          <span id="username-display"></span>
+          <span id="role-display" class="ml-2 px-2 py-1 rounded-full text-xs bg-blue-500"></span>
+        </div>
+        <button onclick="window.api.auth.logout()" class="px-4 py-2 bg-red-500 rounded-md hover:bg-red-600 transition-colors">
+          <i class="fa fa-sign-out mr-1"></i>退出登录
+        </button>
+      </div>
+    </div>
+    <div class="container mx-auto mt-3">
+      <div class="flex flex-wrap gap-2">
+        <button onclick="switchTab('dashboard', this)" class="tab-btn px-4 py-2 rounded-md hover:bg-blue-500 transition-colors">
+          <i class="fa fa-dashboard mr-1"></i>仪表盘
+        </button>
+        <button onclick="switchTab('course', this)" class="tab-btn px-4 py-2 rounded-md hover:bg-blue-500 transition-colors">
+          <i class="fa fa-book mr-1"></i>课程管理
+        </button>
+        <button onclick="switchTab('teacher', this)" class="tab-btn px-4 py-2 rounded-md hover:bg-blue-500 transition-colors">
+          <i class="fa fa-user mr-1"></i>讲师管理
+        </button>
+        <button onclick="switchTab('student', this)" class="tab-btn px-4 py-2 rounded-md hover:bg-blue-500 transition-colors">
+          <i class="fa fa-users mr-1"></i>学员管理
+        </button>
+        <button onclick="switchTab('enroll', this)" class="tab-btn px-4 py-2 rounded-md hover:bg-blue-500 transition-colors">
+          <i class="fa fa-list-alt mr-1"></i>报名管理
+        </button>
+        <button onclick="switchTab('user', this)" class="tab-btn px-4 py-2 rounded-md hover:bg-blue-500 transition-colors">
+          <i class="fa fa-cog mr-1"></i>用户管理
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- 通知组件 -->
+  <div id="notification" class="notification"></div>
+
+  <div class="container mx-auto p-4">
+    <!-- 仪表盘模块 -->
+    <div id="dashboard-tab" class="tab-content block">
+      <div class="bg-white rounded-lg shadow-md p-6">
+        <h2 class="text-xl font-bold mb-4 text-gray-800">
+          <i class="fa fa-dashboard mr-2 text-blue-600"></i>系统概览
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div class="bg-blue-50 p-4 rounded-lg border border-blue-100">
+            <h3 class="text-lg font-medium text-blue-800">课程总数</h3>
+            <p id="course-count" class="text-3xl font-bold text-blue-600 mt-2">0</p>
+          </div>
+          <div class="bg-green-50 p-4 rounded-lg border border-green-100">
+            <h3 class="text-lg font-medium text-green-800">讲师总数</h3>
+            <p id="teacher-count" class="text-3xl font-bold text-green-600 mt-2">0</p>
+          </div>
+          <div class="bg-purple-50 p-4 rounded-lg border border-purple-100">
+            <h3 class="text-lg font-medium text-purple-800">学员总数</h3>
+            <p id="student-count" class="text-3xl font-bold text-purple-600 mt-2">0</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 课程管理模块 -->
+    <div id="course-tab" class="tab-content hidden">
+      <!-- 学员余额与充值 -->
+      <div id="student-wallet-container" class="bg-white rounded-lg shadow-md p-6 mb-6 hidden">
+        <h2 class="text-xl font-bold mb-4 text-gray-800">
+          <i class="fa fa-credit-card mr-2 text-blue-600"></i>我的余额
+        </h2>
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <p class="text-gray-600">可用余额</p>
+            <p id="student-balance-amount" class="text-3xl font-bold text-green-600">¥0.00</p>
+          </div>
+          <form id="student-recharge-form" class="flex flex-col md:flex-row gap-3 items-start md:items-end">
+            <div>
+              <label class="block text-gray-700 mb-1 font-medium">充值金额</label>
+              <input type="number" step="0.01" min="0" name="amount" class="w-48 px-3 py-2 border border-gray-300 rounded-md" placeholder="例如：200.00">
+            </div>
+            <button type="submit" class="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors">
+              <i class="fa fa-plus mr-1"></i>充值
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <!-- 学员可报名课程 -->
+      <div id="student-available-course-container" class="bg-white rounded-lg shadow-md p-6 mb-6 hidden">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-4 gap-3">
+          <h2 class="text-xl font-bold text-gray-800">
+            <i class="fa fa-graduation-cap mr-2 text-blue-600"></i>可报名课程
+          </h2>
+          <p class="text-gray-500 text-sm">仅展示尚未报名且未结课的课程</p>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">课程ID</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">课程名称</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">讲师</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">价格</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+              </tr>
+            </thead>
+            <tbody id="available-course-table-body" class="bg-white divide-y divide-gray-200">
+              <tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">暂无数据</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 学员报名记录 -->
+      <div id="student-enrollments-container" class="bg-white rounded-lg shadow-md p-6 mb-6 hidden">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between mb-4 gap-3">
+          <h2 class="text-xl font-bold text-gray-800">
+            <i class="fa fa-list-alt mr-2 text-blue-600"></i>我的报名记录
+          </h2>
+          <p class="text-gray-500 text-sm">实时查看报名状态</p>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">学生ID</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">课程名称</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">报名时间</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
+              </tr>
+            </thead>
+            <tbody id="student-enroll-table-body" class="bg-white divide-y divide-gray-200">
+              <tr><td colspan="4" class="px-6 py-4 text-center text-gray-500">暂无记录</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 新增课程表单 -->
+      <div id="course-add-container" class="bg-white rounded-lg shadow-md p-6 mb-6">
+        <h2 class="text-xl font-bold mb-4 text-gray-800">
+          <i class="fa fa-plus-circle mr-2 text-blue-600"></i>新增课程
+        </h2>
+        <form id="course-add-form" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-gray-700 mb-1 font-medium">课程ID（必填，数字）</label>
+            <input type="text" name="course_id" class="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="例如：203">
+          </div>
+          <div>
+            <label class="block text-gray-700 mb-1 font-medium">课程名称（必填）</label>
+            <input type="text" name="course_name" class="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="例如：Web前端开发">
+          </div>
+          <div>
+            <label class="block text-gray-700 mb-1 font-medium">讲师ID（可选）</label>
+            <input type="text" name="teacher_id" class="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="关联讲师ID（如101）">
+          </div>
+          <div>
+            <label class="block text-gray-700 mb-1 font-medium">课程价格（必填）</label>
+            <input type="text" name="price" class="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="例如：1999.00">
+          </div>
+          <div>
+            <label class="block text-gray-700 mb-1 font-medium">课程状态</label>
+            <select name="status" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+              <option value="未开始">未开始</option>
+              <option value="进行中">进行中</option>
+              <option value="已结业">已结业</option>
+            </select>
+          </div>
+          <div class="lg:col-span-3">
+            <label class="block text-gray-700 mb-1 font-medium">课程描述（可选）</label>
+            <textarea name="description" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="课程详细介绍..."></textarea>
+          </div>
+          <button type="submit" class="lg:col-span-3 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors">
+            <span id="course-submit-text"><i class="fa fa-save mr-1"></i>提交新增</span>
+            <span id="course-loading" class="loading hidden ml-2"></span>
+          </button>
+        </form>
+      </div>
+
+      <!-- 课程列表 -->
+      <div class="bg-white rounded-lg shadow-md p-6">
+        <h2 class="text-xl font-bold mb-4 text-gray-800">
+          <i class="fa fa-list mr-2 text-blue-600"></i>课程列表
+        </h2>
+        <!-- 搜索功能 -->
+        <div class="flex flex-col md:flex-row gap-4 mb-4">
+          <div class="flex-1">
+            <label class="block text-gray-700 mb-1 font-medium">课程ID</label>
+            <input type="text" id="course-search-id" class="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="输入课程ID">
+          </div>
+          <div class="flex-1">
+            <label class="block text-gray-700 mb-1 font-medium">课程名称</label>
+            <input type="text" id="course-search-name" class="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="输入课程名称">
+          </div>
+          <div class="flex items-end gap-2">
+            <button onclick="searchCourse()" class="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
+              <i class="fa fa-search mr-1"></i>搜索
+            </button>
+            <button onclick="resetCourseSearch()" class="px-6 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors">
+              <i class="fa fa-refresh mr-1"></i>重置
+            </button>
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">课程ID</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">课程名称</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">讲师</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">价格</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+              </tr>
+            </thead>
+            <tbody id="course-table-body" class="bg-white divide-y divide-gray-200">
+              <tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">加载中...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 讲师管理模块 -->
+    <div id="teacher-tab" class="tab-content hidden">
+      <!-- 新增讲师表单 -->
+      <div id="teacher-add-container" class="bg-white rounded-lg shadow-md p-6 mb-6">
+        <h2 class="text-xl font-bold mb-4 text-gray-800">
+          <i class="fa fa-plus-circle mr-2 text-blue-600"></i>新增讲师
+        </h2>
+        <form id="teacher-add-form" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-gray-700 mb-1 font-medium">讲师ID（必填，数字）</label>
+            <input type="text" name="teacher_id" class="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="例如：103">
+          </div>
+          <div>
+            <label class="block text-gray-700 mb-1 font-medium">讲师姓名（必填）</label>
+            <input type="text" name="teacher_name" class="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="例如：王老师">
+          </div>
+          <div>
+            <label class="block text-gray-700 mb-1 font-medium">专业领域（可选）</label>
+            <input type="text" name="major" class="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="例如：英语雅思">
+          </div>
+          <div>
+            <label class="block text-gray-700 mb-1 font-medium">联系电话（可选）</label>
+            <input type="text" name="phone" class="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="例如：13800138003">
+          </div>
+          <div class="lg:col-span-3">
+            <label class="block text-gray-700 mb-1 font-medium">邮箱（可选）</label>
+            <input type="text" name="email" class="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="例如：wang@example.com">
+          </div>
+          <button type="submit" class="lg:col-span-3 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors">
+            <span id="teacher-submit-text"><i class="fa fa-save mr-1"></i>提交新增</span>
+            <span id="teacher-loading" class="loading hidden ml-2"></span>
+          </button>
+        </form>
+      </div>
+
+      <!-- 讲师列表 -->
+      <div class="bg-white rounded-lg shadow-md p-6">
+        <h2 class="text-xl font-bold mb-4 text-gray-800">
+          <i class="fa fa-list mr-2 text-blue-600"></i>讲师列表
+        </h2>
+        <!-- 搜索功能 -->
+        <div class="flex flex-col md:flex-row gap-4 mb-4">
+          <div class="flex-1">
+            <label class="block text-gray-700 mb-1 font-medium">讲师ID</label>
+            <input type="text" id="teacher-search-id" class="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="输入讲师ID">
+          </div>
+          <div class="flex-1">
+            <label class="block text-gray-700 mb-1 font-medium">讲师姓名</label>
+            <input type="text" id="teacher-search-name" class="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="输入讲师姓名">
+          </div>
+          <div class="flex items-end gap-2">
+            <button onclick="searchTeacher()" class="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
+              <i class="fa fa-search mr-1"></i>搜索
+            </button>
+            <button onclick="resetTeacherSearch()" class="px-6 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors">
+              <i class="fa fa-refresh mr-1"></i>重置
+            </button>
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">讲师ID</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">姓名</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">专业领域</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">联系电话</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">邮箱</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+              </tr>
+            </thead>
+            <tbody id="teacher-table-body" class="bg-white divide-y divide-gray-200">
+              <tr><td colspan="5" class="px-6 py-4 text-center text-gray-500">加载中...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 讲师课程报名情况 -->
+      <div id="teacher-enrollments-container" class="bg-white rounded-lg shadow-md p-6 mt-6 hidden">
+        <h2 class="text-xl font-bold mb-4 text-gray-800">
+          <i class="fa fa-users mr-2 text-blue-600"></i>我的课程报名情况
+        </h2>
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">课程名称</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">学员</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">联系电话</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">报名时间</th>
+              </tr>
+            </thead>
+            <tbody id="teacher-enroll-table-body" class="bg-white divide-y divide-gray-200">
+              <tr><td colspan="5" class="px-6 py-4 text-center text-gray-500">暂无报名数据</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 学员管理模块 -->
+    <div id="student-tab" class="tab-content hidden">
+      <!-- 新增学员表单 -->
+      <div id="student-add-container" class="bg-white rounded-lg shadow-md p-6 mb-6">
+        <h2 class="text-xl font-bold mb-4 text-gray-800">
+          <i class="fa fa-plus-circle mr-2 text-blue-600"></i>新增学员
+        </h2>
+        <form id="student-add-form" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-gray-700 mb-1 font-medium">学员ID（必填，数字）</label>
+            <input type="text" name="student_id" class="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="例如：303">
+          </div>
+          <div>
+            <label class="block text-gray-700 mb-1 font-medium">学员姓名（必填）</label>
+            <input type="text" name="student_name" class="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="例如：李四">
+          </div>
+          <div>
+            <label class="block text-gray-700 mb-1 font-medium">性别（可选）</label>
+            <select name="gender" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+              <option value="">请选择</option>
+              <option value="男">男</option>
+              <option value="女">女</option>
+              <option value="未知">未知</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-gray-700 mb-1 font-medium">联系电话（可选）</label>
+            <input type="text" name="phone" class="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="例如：13700137003">
+          </div>
+          <div>
+            <label class="block text-gray-700 mb-1 font-medium">课程ID（可选）</label>
+            <input type="text" name="course_id" class="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="关联课程ID（如201）">
+          </div>
+          <button type="submit" class="lg:col-span-3 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition-colors">
+            <span id="student-submit-text"><i class="fa fa-save mr-1"></i>提交新增</span>
+            <span id="student-loading" class="loading hidden ml-2"></span>
+          </button>
+        </form>
+      </div>
+
+      <!-- 学员列表 -->
+      <div class="bg-white rounded-lg shadow-md p-6">
+        <h2 class="text-xl font-bold mb-4 text-gray-800">
+          <i class="fa fa-list mr-2 text-blue-600"></i>学员列表
+        </h2>
+        <!-- 搜索功能 -->
+        <div class="flex flex-col md:flex-row gap-4 mb-4">
+          <div class="flex-1">
+            <label class="block text-gray-700 mb-1 font-medium">学员ID</label>
+            <input type="text" id="student-search-id" class="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="输入学员ID">
+          </div>
+          <div class="flex-1">
+            <label class="block text-gray-700 mb-1 font-medium">学员姓名</label>
+            <input type="text" id="student-search-name" class="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="输入学员姓名">
+          </div>
+          <div class="flex items-end gap-2">
+            <button onclick="searchStudent()" class="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
+              <i class="fa fa-search mr-1"></i>搜索
+            </button>
+            <button onclick="resetStudentSearch()" class="px-6 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors">
+              <i class="fa fa-refresh mr-1"></i>重置
+            </button>
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">学员ID</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">姓名</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">性别</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">联系电话</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">关联课程</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+              </tr>
+            </thead>
+            <tbody id="student-table-body" class="bg-white divide-y divide-gray-200">
+              <tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">加载中...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 报名管理模块 -->
+    <div id="enroll-tab" class="tab-content hidden">
+      <!-- 报名列表 -->
+      <div class="bg-white rounded-lg shadow-md p-6">
+        <h2 class="text-xl font-bold mb-4 text-gray-800">
+          <i class="fa fa-list-alt mr-2 text-blue-600"></i>报名列表
+        </h2>
+        <!-- 搜索功能 -->
+        <div class="flex flex-col md:flex-row gap-4 mb-4">
+          <div class="flex-1">
+            <label class="block text-gray-700 mb-1 font-medium">学生ID</label>
+            <input type="text" id="enroll-search-student-id" class="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="输入学生ID">
+          </div>
+          <div class="flex-1">
+            <label class="block text-gray-700 mb-1 font-medium">课程名称</label>
+            <input type="text" id="enroll-search-course-name" class="w-full px-3 py-2 border border-gray-300 rounded-md" placeholder="输入课程名称">
+          </div>
+          <div class="flex items-end gap-2">
+            <button onclick="searchEnroll()" class="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
+              <i class="fa fa-search mr-1"></i>搜索
+            </button>
+            <button onclick="resetEnrollSearch()" class="px-6 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition-colors">
+              <i class="fa fa-refresh mr-1"></i>重置
+            </button>
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">学生ID</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">学员姓名</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">课程名称</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">报名时间</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+              </tr>
+            </thead>
+            <tbody id="enroll-table-body" class="bg-white divide-y divide-gray-200">
+              <tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">加载中...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 用户管理模块 -->
+    <div id="user-tab" class="tab-content hidden">
+      <!-- 用户列表 -->
+      <div class="bg-white rounded-lg shadow-md p-6">
+        <h2 class="text-xl font-bold mb-4 text-gray-800">
+          <i class="fa fa-users mr-2 text-blue-600"></i>用户列表
+        </h2>
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-gray-200">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">用户ID</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">用户名</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">角色</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">关联ID</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+              </tr>
+            </thead>
+            <tbody id="user-table-body" class="bg-white divide-y divide-gray-200">
+              <tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">加载中...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 通用修改弹窗 -->
+  <div id="edit-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6">
+      <div class="flex justify-between items-center mb-4">
+        <h3 id="edit-modal-title" class="text-xl font-bold text-gray-800">修改信息</h3>
+        <button onclick="closeEditModal()" class="text-gray-500 hover:text-gray-700 transition-colors">
+          <i class="fa fa-times text-xl"></i>
+        </button>
+      </div>
+      <form id="edit-form">
+        <input type="hidden" id="edit-id">
+        <input type="hidden" id="edit-type">
+        <div id="edit-form-content">
+          <!-- 动态填充表单 -->
+        </div>
+        <div class="mt-6 flex justify-end space-x-3">
+          <button type="button" onclick="closeEditModal()" class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 transition-colors">
+            取消
+          </button>
+          <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
+            <span id="edit-submit-text">保存修改</span>
+            <span id="edit-loading" class="loading hidden ml-2"></span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 引入API封装 -->
+  <script src="./static/js/api.js"></script>
+  
+  <script>
+    let currentUser = null;
+    let currentTab = 'dashboard';
+
+    // 金额格式化
+    function formatCurrency(value = 0) {
+      const amount = Number(value) || 0;
+      return `¥${amount.toFixed(2)}`;
+    }
+
+    async function loadStudentBalance() {
+      if (currentUser.role !== 'student') return;
+      const balanceEl = document.getElementById('student-balance-amount');
+      if (!balanceEl) return;
+      balanceEl.textContent = '加载中...';
+
+      try {
+        const res = await window.api.student.getBalance();
+        balanceEl.textContent = formatCurrency(res.data?.balance || 0);
+      } catch (err) {
+        console.error('加载学生余额失败：', err);
+        balanceEl.textContent = formatCurrency(0);
+        showNotification('加载余额失败', 'error');
+      }
+    }
+
+    async function loadAvailableCourses() {
+      if (currentUser.role !== 'student') return;
+      const tableBody = document.getElementById('available-course-table-body');
+      if (!tableBody) return;
+      tableBody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">加载中...</td></tr>';
+
+      try {
+        const res = await window.api.course.getAvailable();
+        tableBody.innerHTML = '';
+        if (!res.data.length) {
+          tableBody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">暂无可报名课程</td></tr>';
+          return;
+        }
+
+        res.data.forEach(course => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap">${course.course_id}</td>
+            <td class="px-6 py-4 whitespace-nowrap">${course.course_name}</td>
+            <td class="px-6 py-4 whitespace-nowrap">${course.teacher_name || '-'}</td>
+            <td class="px-6 py-4 whitespace-nowrap">${formatCurrency(course.price)}</td>
+            <td class="px-6 py-4 whitespace-nowrap">${course.status}</td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <button onclick="enrollCourse(${course.course_id})" class="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
+                <i class="fa fa-check mr-1"></i>报名
+              </button>
+            </td>
+          `;
+          tableBody.appendChild(tr);
+        });
+      } catch (err) {
+        console.error('加载可报名课程失败：', err);
+        tableBody.innerHTML = `<tr><td colspan="6" class="px-6 py-4 text-center text-red-500">加载失败：${err.message}</td></tr>`;
+      }
+    }
+
+    async function loadStudentEnrollments() {
+      if (currentUser.role !== 'student') return;
+      const tableBody = document.getElementById('student-enroll-table-body');
+      if (!tableBody) return;
+      tableBody.innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center text-gray-500">加载中...</td></tr>';
+
+      try {
+        const res = await window.api.enroll.getMyEnrolls();
+        tableBody.innerHTML = '';
+        if (!res.data.length) {
+          tableBody.innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center text-gray-500">暂无报名记录</td></tr>';
+          return;
+        }
+
+        res.data
+          .sort((a, b) => new Date(b.enroll_time) - new Date(a.enroll_time))
+          .forEach(enroll => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap">${enroll.student_id}</td>
+            <td class="px-6 py-4 whitespace-nowrap">${enroll.course_name}</td>
+            <td class="px-6 py-4 whitespace-nowrap">${new Date(enroll.enroll_time).toLocaleString()}</td>
+            <td class="px-6 py-4 whitespace-nowrap">
+                <span class="px-2 py-1 rounded-full text-xs ${
+                  enroll.status === 'approved'
+                    ? 'bg-green-100 text-green-800'
+                    : enroll.status === 'pending'
+                    ? 'bg-yellow-100 text-yellow-800'
+                    : 'bg-gray-200 text-gray-600'
+                }">${enroll.status === 'approved' ? '已通过' : enroll.status === 'pending' ? '审核中' : '已拒绝'}</span>
+            </td>
+          `;
+          tableBody.appendChild(tr);
+        });
+      } catch (err) {
+        console.error('加载报名记录失败：', err);
+        tableBody.innerHTML = `<tr><td colspan="4" class="px-6 py-4 text-center text-red-500">加载失败：${err.message}</td></tr>`;
+      }
+    }
+
+    async function enrollCourse(courseId) {
+      if (currentUser.role !== 'student') return;
+      if (!confirm('确认报名该课程？')) return;
+
+      try {
+        const res = await window.api.enroll.add({ course_id: courseId });
+        showNotification(res.message);
+        await loadStudentBalance();
+        await loadAvailableCourses();
+        await loadStudentEnrollments();
+      } catch (err) {
+        console.error('报名课程失败：', err);
+        showNotification('报名失败：' + err.message, 'error');
+      }
+    }
+
+    // 显示/隐藏模块
+    function toggleSection(id, shouldShow) {
+      const section = document.getElementById(id);
+      if (!section) return;
+      if (shouldShow) {
+        section.classList.remove('hidden');
+      } else {
+        section.classList.add('hidden');
+      }
+    }
+
+    // 显示通知
+    function showNotification(message, type = 'success') {
+      const notification = document.getElementById('notification');
+      notification.textContent = message;
+      notification.className = 'notification';
+      notification.classList.add(type);
+      notification.classList.add('show');
+      
+      setTimeout(() => {
+        notification.classList.remove('show');
+      }, 3000);
+    }
+
+    // 页面初始化
+    window.addEventListener('DOMContentLoaded', async () => {
+      // 检查登录状态
+      const token = localStorage.getItem('token');
+      const userStr = localStorage.getItem('user');
+      
+      if (!token || !userStr) {
+        window.location.href = 'login.html';
+        return;
+      }
+
+      try {
+        // 解析用户信息
+        currentUser = JSON.parse(userStr);
+        
+        // 验证token有效性
+        await window.api.auth.verifyToken();
+        
+        // 初始化用户信息显示
+        initUserInfo();
+        
+        // 初始化权限控制
+        initPermissions();
+        
+        // 加载默认数据
+        switchTab('dashboard', document.querySelector('.tab-btn'));
+      } catch (err) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        showNotification('登录已过期，请重新登录', 'error');
+        setTimeout(() => {
+          window.location.href = 'login.html';
+        }, 2000);
+      }
+    });
+
+    // 初始化用户信息显示
+    function initUserInfo() {
+      document.getElementById('username-display').textContent = currentUser.username;
+      const roleText = currentUser.role === 'admin' ? '管理员' : currentUser.role === 'teacher' ? '教师' : '学生';
+      document.getElementById('role-display').textContent = roleText;
+      document.getElementById('role-display').className = `ml-2 px-2 py-1 rounded-full text-xs ${
+        currentUser.role === 'admin' ? 'bg-red-500' : currentUser.role === 'teacher' ? 'bg-green-500' : 'bg-purple-500'
+      }`;
+    }
+
+    // 初始化权限控制
+    function initPermissions() {
+      const { role } = currentUser;
+
+      toggleSection('student-wallet-container', role === 'student');
+      toggleSection('student-available-course-container', role === 'student');
+      toggleSection('student-enrollments-container', role === 'student');
+      toggleSection('teacher-enrollments-container', role === 'teacher');
+
+      // 隐藏无权限的导航项
+      if (role !== 'admin') {
+        document.querySelector('.tab-btn[onclick*="user"]').style.display = 'none';
+      }
+      if (role === 'student') {
+        document.querySelector('.tab-btn[onclick*="teacher"]').style.display = 'none';
+        document.querySelector('.tab-btn[onclick*="enroll"]').style.display = 'none';
+        // 隐藏新增表单
+        document.getElementById('course-add-container').style.display = 'none';
+        document.getElementById('teacher-add-container').style.display = 'none';
+        document.getElementById('student-add-container').style.display = 'none';
+      } else if (role === 'teacher') {
+        document.querySelector('.tab-btn[onclick*="student"]').style.display = 'none';
+        document.getElementById('teacher-add-container').style.display = 'none';
+        document.getElementById('student-add-container').style.display = 'none';
+      }
+    }
+
+    // 标签页切换
+    function switchTab(tabName, btnElement) {
+      // 隐藏所有标签内容
+      document.querySelectorAll('.tab-content').forEach(tab => tab.classList.add('hidden'));
+      // 显示当前标签内容
+      document.getElementById(`${tabName}-tab`).classList.remove('hidden');
+      // 重置所有按钮样式
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.style.backgroundColor = '';
+        btn.style.color = '';
+      });
+      // 设置当前按钮样式
+      if (btnElement) {
+        btnElement.style.backgroundColor = '#2563eb';
+        btnElement.style.color = 'white';
+      }
+      currentTab = tabName;
+
+      // 加载对应数据
+      if (tabName === 'dashboard') loadDashboardData();
+      if (tabName === 'course') {
+        if (currentUser.role === 'student') {
+          loadStudentBalance();
+          loadAvailableCourses();
+          loadStudentEnrollments();
+        }
+        loadCourseList();
+      }
+      if (tabName === 'teacher') {
+        loadTeacherList();
+        if (currentUser.role === 'teacher') {
+          loadTeacherEnrollments();
+        }
+      }
+      if (tabName === 'student') loadStudentList();
+      if (tabName === 'enroll') loadEnrollList();
+      if (tabName === 'user') loadUserList();
+      if (tabName === 'student' && currentUser.role === 'admin') {
+        loadStudentList(true);
+      }
+    }
+
+    // 加载仪表盘数据
+    async function loadDashboardData() {
+      try {
+        const res = await window.api.dashboard.getStats();
+        document.getElementById('course-count').textContent = res.data.courseCount || 0;
+        document.getElementById('teacher-count').textContent = res.data.teacherCount || 0;
+        document.getElementById('student-count').textContent = res.data.studentCount || 0;
+      } catch (err) {
+        console.error('加载仪表盘数据失败：', err);
+        showNotification('加载仪表盘数据失败', 'error');
+      }
+    }
+
+    // 课程列表加载
+    // 搜索课程
+    function searchCourse() {
+      const courseId = document.getElementById('course-search-id').value.trim();
+      const courseName = document.getElementById('course-search-name').value.trim();
+      loadCourseList({ course_id: courseId || undefined, course_name: courseName || undefined });
+    }
+
+    // 重置课程搜索
+    function resetCourseSearch() {
+      document.getElementById('course-search-id').value = '';
+      document.getElementById('course-search-name').value = '';
+      loadCourseList();
+    }
+
+    async function loadCourseList(params = {}) {
+      const tableBody = document.getElementById('course-table-body');
+      tableBody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">加载中...</td></tr>';
+      
+      try {
+        if (currentUser.role === 'student') {
+          const res = await window.api.enroll.getMyEnrolls();
+          const approvedCourses = res.data.filter(item => item.status === 'approved');
+
+          tableBody.innerHTML = '';
+          if (!approvedCourses.length) {
+            tableBody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">暂无已通过课程</td></tr>';
+            return;
+          }
+
+          approvedCourses
+            .sort((a, b) => new Date(b.enroll_time) - new Date(a.enroll_time))
+            .forEach(course => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td class="px-6 py-4 whitespace-nowrap">${course.course_id}</td>
+              <td class="px-6 py-4 whitespace-nowrap">${course.course_name}</td>
+              <td class="px-6 py-4 whitespace-nowrap">${course.teacher_name || '-'}</td>
+              <td class="px-6 py-4 whitespace-nowrap">${formatCurrency(course.price)}</td>
+              <td class="px-6 py-4 whitespace-nowrap">
+                <span class="px-2 py-1 rounded-full text-xs ${
+                  course.course_status === '进行中'
+                    ? 'bg-green-100 text-green-800'
+                    : course.course_status === '已结业'
+                    ? 'bg-gray-100 text-gray-800'
+                    : 'bg-yellow-100 text-yellow-800'
+                }">${course.course_status || '未知'}</span>
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap">-</td>
+            `;
+            tableBody.appendChild(tr);
+          });
+          return;
+        }
+
+        const res = await window.api.course.getList(params);
+        
+        tableBody.innerHTML = '';
+        if (res.data.length === 0) {
+          tableBody.innerHTML = `<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">暂无课程数据</td></tr>`;
+          return;
+        }
+        
+        res.data.forEach(course => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap">${course.course_id}</td>
+            <td class="px-6 py-4 whitespace-nowrap">${course.course_name}</td>
+            <td class="px-6 py-4 whitespace-nowrap">${course.teacher_name || '-'}</td>
+            <td class="px-6 py-4 whitespace-nowrap">${formatCurrency(course.price)}</td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <span class="px-2 py-1 rounded-full text-xs ${
+                course.status === '进行中' ? 'bg-green-100 text-green-800' : 
+                course.status === '已结业' ? 'bg-gray-100 text-gray-800' : 'bg-yellow-100 text-yellow-800'
+              }">${course.status}</span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              ${currentUser.role !== 'student' ? `
+                <button onclick="openEditModal('course', ${course.course_id})" class="text-blue-600 hover:text-blue-900 mr-3 transition-colors">
+                  <i class="fa fa-pencil"></i> 修改
+                </button>
+                ${currentUser.role === 'admin' ? `
+                  <button onclick="deleteItem('course', ${course.course_id})" class="text-red-600 hover:text-red-900 transition-colors">
+                    <i class="fa fa-trash"></i> 删除
+                  </button>
+                ` : ''}
+              ` : '-'}
+            </td>
+          `;
+          tableBody.appendChild(tr);
+        });
+      } catch (err) {
+        console.error('加载课程列表失败：', err);
+        tableBody.innerHTML = `<tr><td colspan="6" class="px-6 py-4 text-center text-red-500">加载失败：${err.message}</td></tr>`;
+      }
+    }
+
+    // 搜索讲师
+    function searchTeacher() {
+      const teacherId = document.getElementById('teacher-search-id').value.trim();
+      const teacherName = document.getElementById('teacher-search-name').value.trim();
+      loadTeacherList({ teacher_id: teacherId || undefined, teacher_name: teacherName || undefined });
+    }
+
+    // 重置讲师搜索
+    function resetTeacherSearch() {
+      document.getElementById('teacher-search-id').value = '';
+      document.getElementById('teacher-search-name').value = '';
+      loadTeacherList();
+    }
+
+    // 讲师列表加载
+    async function loadTeacherList(params = {}) {
+      const tableBody = document.getElementById('teacher-table-body');
+      tableBody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">加载中...</td></tr>';
+      
+      try {
+        const res = await window.api.teacher.getList(params);
+        tableBody.innerHTML = '';
+        
+        if (res.data.length === 0) {
+          tableBody.innerHTML = `<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">暂无讲师数据</td></tr>`;
+          return;
+        }
+        
+        res.data.forEach(teacher => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap">${teacher.teacher_id}</td>
+            <td class="px-6 py-4 whitespace-nowrap">${teacher.teacher_name}</td>
+            <td class="px-6 py-4 whitespace-nowrap">${teacher.major || '-'}</td>
+            <td class="px-6 py-4 whitespace-nowrap">${teacher.phone || '-'}</td>
+            <td class="px-6 py-4 whitespace-nowrap">${teacher.email || '-'}</td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              ${currentUser.role === 'admin' ? `
+                <button onclick="openEditModal('teacher', ${teacher.teacher_id})" class="text-blue-600 hover:text-blue-900 mr-3 transition-colors">
+                  <i class="fa fa-pencil"></i> 修改
+                </button>
+                <button onclick="deleteItem('teacher', ${teacher.teacher_id})" class="text-red-600 hover:text-red-900 transition-colors">
+                  <i class="fa fa-trash"></i> 删除
+                </button>
+              ` : '-'} 
+            </td>
+          `;
+          tableBody.appendChild(tr);
+        });
+      } catch (err) {
+        console.error('加载讲师列表失败：', err);
+        tableBody.innerHTML = `<tr><td colspan="6" class="px-6 py-4 text-center text-red-500">加载失败：${err.message}</td></tr>`;
+      }
+    }
+
+    async function loadTeacherEnrollments() {
+      if (currentUser.role !== 'teacher') return;
+      const tableBody = document.getElementById('teacher-enroll-table-body');
+      if (!tableBody) return;
+      tableBody.innerHTML = '<tr><td colspan="5" class="px-6 py-4 text-center text-gray-500">加载中...</td></tr>';
+
+      try {
+        const res = await window.api.teacher.getEnrollments();
+        tableBody.innerHTML = '';
+
+        if (!res.data.length) {
+          tableBody.innerHTML = '<tr><td colspan="5" class="px-6 py-4 text-center text-gray-500">暂无课程信息</td></tr>';
+          return;
+        }
+
+        res.data.forEach(course => {
+          if (!course.students.length) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td class="px-6 py-4 whitespace-nowrap">${course.course_name}</td>
+              <td class="px-6 py-4 whitespace-nowrap text-gray-500">暂无报名</td>
+              <td class="px-6 py-4 whitespace-nowrap">-</td>
+              <td class="px-6 py-4 whitespace-nowrap">
+                <span class="px-2 py-1 rounded-full text-xs bg-gray-100 text-gray-800">${course.status}</span>
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap">-</td>
+            `;
+            tableBody.appendChild(tr);
+            return;
+          }
+
+          course.students.forEach(student => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td class="px-6 py-4 whitespace-nowrap">${course.course_name}</td>
+              <td class="px-6 py-4 whitespace-nowrap">${student.student_name}</td>
+              <td class="px-6 py-4 whitespace-nowrap">${student.phone || '-'}</td>
+              <td class="px-6 py-4 whitespace-nowrap">
+                <span class="px-2 py-1 rounded-full text-xs ${
+                  student.status === 'approved'
+                    ? 'bg-green-100 text-green-800'
+                    : student.status === 'pending'
+                    ? 'bg-yellow-100 text-yellow-800'
+                    : 'bg-red-100 text-red-800'
+                }">${student.status === 'approved' ? '已通过' : student.status === 'pending' ? '审核中' : '已拒绝'}</span>
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap">${student.enroll_time ? new Date(student.enroll_time).toLocaleString() : '-'}</td>
+            `;
+            tableBody.appendChild(tr);
+          });
+        });
+      } catch (err) {
+        console.error('加载教师报名情况失败：', err);
+        tableBody.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-red-500">加载失败：${err.message}</td></tr>`;
+      }
+    }
+
+    // 学员列表加载
+    async function loadStudentList(params = {}, forceReload = false) {
+      const tableBody = document.getElementById('student-table-body');
+      tableBody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">加载中...</td></tr>';
+      
+      try {
+        let res;
+        if (currentUser.role === 'student') {
+          res = await window.api.student.getMyInfo();
+          res.data = [res.data]; // 转为数组统一处理
+        } else {
+          res = await window.api.student.getList(params);
+        }
+        
+        tableBody.innerHTML = '';
+        
+        if (res.data.length === 0) {
+          tableBody.innerHTML = `<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">暂无学员数据</td></tr>`;
+          return;
+        }
+        
+        res.data
+          .sort((a, b) => (a.course_name || '').localeCompare(b.course_name || ''))
+          .forEach(student => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap">${student.student_id}</td>
+            <td class="px-6 py-4 whitespace-nowrap">${student.student_name}</td>
+            <td class="px-6 py-4 whitespace-nowrap">${student.gender || '-'}</td>
+            <td class="px-6 py-4 whitespace-nowrap">${student.phone || '-'}</td>
+            <td class="px-6 py-4 whitespace-nowrap">${student.course_name || '-'}</td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              ${currentUser.role === 'admin' ? `
+                <button onclick="openEditModal('student', ${student.student_id})" class="text-blue-600 hover:text-blue-900 mr-3 transition-colors">
+                  <i class="fa fa-pencil"></i> 修改
+                </button>
+                <button onclick="deleteItem('student', ${student.student_id})" class="text-red-600 hover:text-red-900 transition-colors">
+                  <i class="fa fa-trash"></i> 删除
+                </button>
+              ` : '-'}
+            </td>
+          `;
+          tableBody.appendChild(tr);
+        });
+      } catch (err) {
+        console.error('加载学员列表失败：', err);
+        tableBody.innerHTML = `<tr><td colspan="6" class="px-6 py-4 text-center text-red-500">加载失败：${err.message}</td></tr>`;
+      }
+    }
+
+    // 搜索学员
+    function searchStudent() {
+      const studentId = document.getElementById('student-search-id').value.trim();
+      const studentName = document.getElementById('student-search-name').value.trim();
+      loadStudentList({ student_id: studentId || undefined, student_name: studentName || undefined });
+    }
+
+    // 重置学员搜索
+    function resetStudentSearch() {
+      document.getElementById('student-search-id').value = '';
+      document.getElementById('student-search-name').value = '';
+      loadStudentList();
+    }
+
+    // 报名列表加载
+    async function loadEnrollList(params = {}) {
+      const tableBody = document.getElementById('enroll-table-body');
+      tableBody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">加载中...</td></tr>';
+      
+      try {
+        let res;
+        if (currentUser.role === 'student') {
+          res = await window.api.enroll.getMyEnrolls();
+        } else {
+          res = await window.api.enroll.getList(params);
+        }
+        
+        tableBody.innerHTML = '';
+        
+        if (res.data.length === 0) {
+          tableBody.innerHTML = `<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">暂无报名数据</td></tr>`;
+          return;
+        }
+        
+        res.data
+          .sort((a, b) => new Date(b.enroll_time) - new Date(a.enroll_time))
+          .forEach(enroll => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap">${enroll.student_id}</td>
+            <td class="px-6 py-4 whitespace-nowrap">${enroll.student_name}</td>
+            <td class="px-6 py-4 whitespace-nowrap">${enroll.course_name}</td>
+            <td class="px-6 py-4 whitespace-nowrap">${new Date(enroll.enroll_time).toLocaleString()}</td>
+            <td class="px-6 py-4 whitespace-nowrap">
+                <span class="px-2 py-1 rounded-full text-xs ${
+                  enroll.status === 'approved'
+                    ? 'bg-green-100 text-green-800'
+                    : enroll.status === 'pending'
+                    ? 'bg-yellow-100 text-yellow-800'
+                    : 'bg-gray-200 text-gray-600'
+                }">${enroll.status === 'approved' ? '已通过' : enroll.status === 'pending' ? '审核中' : '已拒绝'}</span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              ${currentUser.role === 'admin' ? `
+                <button onclick="approveEnroll(${enroll.enroll_id}, 'approved')" class="text-green-600 hover:text-green-900 mr-3 transition-colors">
+                  <i class="fa fa-check"></i> 通过
+                </button>
+                <button onclick="approveEnroll(${enroll.enroll_id}, 'rejected')" class="text-red-600 hover:text-red-900 transition-colors">
+                  <i class="fa fa-times"></i> 拒绝
+                </button>
+              ` : '-'}
+            </td>
+          `;
+          tableBody.appendChild(tr);
+        });
+      } catch (err) {
+        console.error('加载报名列表失败：', err);
+        tableBody.innerHTML = `<tr><td colspan="6" class="px-6 py-4 text-center text-red-500">加载失败：${err.message}</td></tr>`;
+      }
+    }
+
+    // 搜索报名
+    function searchEnroll() {
+      const studentId = document.getElementById('enroll-search-student-id').value.trim();
+      const courseName = document.getElementById('enroll-search-course-name').value.trim();
+      loadEnrollList({ student_id: studentId || undefined, course_name: courseName || undefined });
+    }
+
+    // 重置报名搜索
+    function resetEnrollSearch() {
+      document.getElementById('enroll-search-student-id').value = '';
+      document.getElementById('enroll-search-course-name').value = '';
+      loadEnrollList();
+    }
+
+    // 用户列表加载
+    async function loadUserList() {
+      const tableBody = document.getElementById('user-table-body');
+      tableBody.innerHTML = '<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">加载中...</td></tr>';
+      
+      try {
+        const res = await window.api.user.getList();
+        tableBody.innerHTML = '';
+        
+        if (res.data.length === 0) {
+          tableBody.innerHTML = `<tr><td colspan="6" class="px-6 py-4 text-center text-gray-500">暂无用户数据</td></tr>`;
+          return;
+        }
+        
+        res.data.forEach(user => {
+          const tr = document.createElement('tr');
+          const isDisabled = user.status === 'disabled';
+          tr.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap">${user.user_id}</td>
+            <td class="px-6 py-4 whitespace-nowrap">${user.username}</td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <span class="px-2 py-1 rounded-full text-xs ${user.role === 'admin' ? 'bg-red-100 text-red-800' : user.role === 'teacher' ? 'bg-green-100 text-green-800' : 'bg-purple-100 text-purple-800'}">${user.role === 'admin' ? '管理员' : user.role === 'teacher' ? '教师' : '学生'}</span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">${user.related_id || '-'}</td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <span class="px-2 py-1 rounded-full text-xs ${isDisabled ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}">${isDisabled ? '禁用' : '正常'}</span>
+            </td>
+            <td class="px-6 py-4 whitespace-nowrap">
+              <button onclick="toggleUserStatus(${user.user_id}, '${isDisabled ? 'enabled' : 'disabled'}')" class="text-blue-600 hover:text-blue-900 transition-colors">
+                <i class="fa fa-${isDisabled ? 'refresh' : 'ban'}"></i> ${isDisabled ? '恢复' : '禁用'}
+              </button>
+            </td>
+          `;
+          tableBody.appendChild(tr);
+        });
+      } catch (err) {
+        console.error('加载用户列表失败：', err);
+        tableBody.innerHTML = `<tr><td colspan="6" class="px-6 py-4 text-center text-red-500">加载失败：${err.message}</td></tr>`;
+      }
+    }
+
+    // 打开修改弹窗
+    async function openEditModal(type, id) {
+      document.getElementById('edit-id').value = id;
+      document.getElementById('edit-type').value = type;
+      const content = document.getElementById('edit-form-content');
+      content.innerHTML = '<div class="text-center py-8"><div class="loading mx-auto"></div><p class="mt-2 text-gray-500">加载中...</p></div>';
+
+      try {
+        let res;
+        if (type === 'course') {
+          document.getElementById('edit-modal-title').textContent = '修改课程信息';
+          res = await window.api.course.getOne(id);
+          const course = res.data;
+          content.innerHTML = `
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-gray-700 mb-1 font-medium">课程名称（必填）</label>
+                <input type="text" name="edit_course_name" class="w-full px-3 py-2 border border-gray-300 rounded-md" value="${course.course_name || ''}">
+              </div>
+              <div>
+                <label class="block text-gray-700 mb-1 font-medium">讲师ID（可选）</label>
+                <input type="text" name="edit_teacher_id" class="w-full px-3 py-2 border border-gray-300 rounded-md" value="${course.teacher_id || ''}">
+              </div>
+              <div>
+                <label class="block text-gray-700 mb-1 font-medium">课程价格（必填）</label>
+                <input type="text" name="edit_price" class="w-full px-3 py-2 border border-gray-300 rounded-md" value="${course.price || ''}">
+              </div>
+              <div>
+                <label class="block text-gray-700 mb-1 font-medium">课程状态</label>
+                <select name="edit_status" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                  <option value="未开始" ${course.status === '未开始' ? 'selected' : ''}>未开始</option>
+                  <option value="进行中" ${course.status === '进行中' ? 'selected' : ''}>进行中</option>
+                  <option value="已结业" ${course.status === '已结业' ? 'selected' : ''}>已结业</option>
+                </select>
+              </div>
+              <div class="md:col-span-2">
+                <label class="block text-gray-700 mb-1 font-medium">课程描述（可选）</label>
+                <textarea name="edit_description" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-md">${course.description || ''}</textarea>
+              </div>
+            </div>
+          `;
+        } else if (type === 'teacher') {
+          document.getElementById('edit-modal-title').textContent = '修改讲师信息';
+          res = await window.api.teacher.getOne(id);
+          const teacher = res.data;
+          content.innerHTML = `
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-gray-700 mb-1 font-medium">讲师姓名（必填）</label>
+                <input type="text" name="edit_teacher_name" class="w-full px-3 py-2 border border-gray-300 rounded-md" value="${teacher.teacher_name || ''}">
+              </div>
+              <div>
+                <label class="block text-gray-700 mb-1 font-medium">专业领域（可选）</label>
+                <input type="text" name="edit_major" class="w-full px-3 py-2 border border-gray-300 rounded-md" value="${teacher.major || ''}">
+              </div>
+              <div>
+                <label class="block text-gray-700 mb-1 font-medium">联系电话（可选）</label>
+                <input type="text" name="edit_phone" class="w-full px-3 py-2 border border-gray-300 rounded-md" value="${teacher.phone || ''}">
+              </div>
+              <div>
+                <label class="block text-gray-700 mb-1 font-medium">邮箱（可选）</label>
+                <input type="text" name="edit_email" class="w-full px-3 py-2 border border-gray-300 rounded-md" value="${teacher.email || ''}">
+              </div>
+            </div>
+          `;
+        } else if (type === 'student') {
+          document.getElementById('edit-modal-title').textContent = '修改学员信息';
+          // 并行获取学员信息和报名记录
+          const [studentRes, enrollsRes] = await Promise.all([
+            window.api.student.getOne(id),
+            window.api.enroll.getList({ student_id: id })
+          ]);
+          const student = studentRes.data;
+          const enrolls = enrollsRes.data || [];
+          
+          // 生成课程下拉选项
+          let courseOptions = `<option value="">请选择课程</option>`;
+          const enrolledCourses = new Set();
+          
+          enrolls.forEach(enroll => {
+            if (enroll.course_id) {
+              const courseIdStr = String(enroll.course_id);
+              if (!enrolledCourses.has(courseIdStr)) {
+                enrolledCourses.add(courseIdStr);
+                courseOptions += `<option value="${enroll.course_id}" ${String(student.course_id) === courseIdStr ? 'selected' : ''}>${enroll.course_name}</option>`;
+              }
+            }
+          });
+          
+          content.innerHTML = `
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-gray-700 mb-1 font-medium">学员姓名（必填）</label>
+                <input type="text" name="edit_student_name" class="w-full px-3 py-2 border border-gray-300 rounded-md" value="${student.student_name || ''}">
+              </div>
+              <div>
+                <label class="block text-gray-700 mb-1 font-medium">性别（可选）</label>
+                <select name="edit_gender" class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                  <option value="">请选择</option>
+                  <option value="男" ${student.gender === '男' ? 'selected' : ''}>男</option>
+                  <option value="女" ${student.gender === '女' ? 'selected' : ''}>女</option>
+                  <option value="未知" ${student.gender === '未知' ? 'selected' : ''}>未知</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-gray-700 mb-1 font-medium">联系电话（可选）</label>
+                <input type="text" name="edit_phone" class="w-full px-3 py-2 border border-gray-300 rounded-md" value="${student.phone || ''}">
+              </div>
+            </div>
+          `;
+        }
+        document.getElementById('edit-modal').classList.remove('hidden');
+      } catch (err) {
+        console.error(`获取${type}详情失败：`, err);
+        content.innerHTML = `<div class="text-center py-8 text-red-500">加载失败：${err.message}</div>`;
+      }
+    }
+
+    // 关闭修改弹窗
+    function closeEditModal() {
+      document.getElementById('edit-modal').classList.add('hidden');
+      document.getElementById('edit-form').reset();
+    }
+
+    // 删除数据
+    async function deleteItem(type, id) {
+      if (!confirm(`确定要删除ID为${id}的${type === 'course' ? '课程' : type === 'teacher' ? '讲师' : '学员'}吗？`)) return;
+      
+      try {
+        const deleteId = Number(id);
+        let res;
+        if (type === 'course') {
+          res = await window.api.course.delete(deleteId);
+        } else if (type === 'teacher') {
+          res = await window.api.teacher.delete(deleteId);
+        } else if (type === 'student') {
+          res = await window.api.student.delete(deleteId);
+        }
+        showNotification(res.message);
+        // 重新加载数据
+        if (currentTab === type) {
+          if (type === 'course') loadCourseList();
+          if (type === 'teacher') loadTeacherList();
+          if (type === 'student') loadStudentList();
+        }
+      } catch (err) {
+        console.error(`删除${type}失败：`, err);
+        showNotification('删除失败：' + err.message, 'error');
+      }
+    }
+
+    // 审核报名
+    async function approveEnroll(id, status) {
+      const action = status === 'approved' ? '通过' : '拒绝';
+      if (!confirm(`确定要${action}该报名申请吗？`)) return;
+      
+      try {
+        const res = await window.api.enroll.approve(id, status);
+        showNotification(res.message);
+        loadEnrollList();
+      } catch (err) {
+        console.error('审核报名失败：', err);
+        showNotification('审核失败：' + err.message, 'error');
+      }
+    }
+
+    // 切换用户状态
+    async function toggleUserStatus(id, status) {
+      const action = status === 'disabled' ? '禁用' : '恢复';
+      if (!confirm(`确定要${action}该用户吗？`)) return;
+      
+      try {
+        const res = await window.api.user.updateStatus(id, status);
+        showNotification(res.message);
+        loadUserList();
+      } catch (err) {
+        console.error(`${action}用户失败：`, err);
+        showNotification(`${action}失败：` + err.message, 'error');
+      }
+    }
+
+    // 绑定表单提交事件
+    document.addEventListener('DOMContentLoaded', () => {
+      // 新增课程表单
+      document.getElementById('course-add-form')?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const submitBtn = e.submitter;
+        const submitText = document.getElementById('course-submit-text');
+        const loading = document.getElementById('course-loading');
+        
+        submitBtn.disabled = true;
+        submitText.textContent = '提交中...';
+        loading.classList.remove('hidden');
+
+        const formData = new FormData(e.target);
+        const data = {
+          course_id: Number(formData.get('course_id')),
+          course_name: formData.get('course_name')?.trim(),
+          teacher_id: formData.get('teacher_id') ? Number(formData.get('teacher_id')) : null,
+          price: Number(formData.get('price')),
+          status: formData.get('status'),
+          description: formData.get('description')?.trim() || null
+        };
+
+        try {
+          const res = await window.api.course.add(data);
+          showNotification(res.message);
+          e.target.reset();
+          loadCourseList();
+        } catch (err) {
+          console.error('新增课程失败：', err);
+          showNotification('新增失败：' + err.message, 'error');
+        } finally {
+          submitBtn.disabled = false;
+          submitText.innerHTML = '<i class="fa fa-save mr-1"></i>提交新增';
+          loading.classList.add('hidden');
+        }
+      });
+
+      // 新增讲师表单
+      document.getElementById('teacher-add-form')?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const submitBtn = e.submitter;
+        const submitText = document.getElementById('teacher-submit-text');
+        const loading = document.getElementById('teacher-loading');
+        
+        submitBtn.disabled = true;
+        submitText.textContent = '提交中...';
+        loading.classList.remove('hidden');
+
+        const formData = new FormData(e.target);
+        
+        // 验证电话格式
+        const phone = formData.get('phone')?.trim();
+        if (phone) {
+          const phoneRegex = /^1[3-9]\d{9}$/;
+          if (!phoneRegex.test(phone)) {
+            showNotification('电话号码必须是11位数字且以1开头', 'error');
+            submitBtn.disabled = false;
+            submitText.innerHTML = '<i class="fa fa-save mr-1"></i>提交新增';
+            loading.classList.add('hidden');
+            return;
+          }
+        }
+        
+        // 验证邮箱格式
+        const email = formData.get('email')?.trim();
+        if (email) {
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          if (!emailRegex.test(email)) {
+            showNotification('邮箱格式不正确，请包含@符号', 'error');
+            submitBtn.disabled = false;
+            submitText.innerHTML = '<i class="fa fa-save mr-1"></i>提交新增';
+            loading.classList.add('hidden');
+            return;
+          }
+        }
+        
+        const data = {
+          teacher_id: Number(formData.get('teacher_id')),
+          teacher_name: formData.get('teacher_name')?.trim(),
+          major: formData.get('major')?.trim() || null,
+          phone: phone || null,
+          email: email || null
+        };
+
+        try {
+          const res = await window.api.teacher.add(data);
+          showNotification(res.message);
+          e.target.reset();
+          loadTeacherList();
+        } catch (err) {
+          console.error('新增讲师失败：', err);
+          showNotification('新增失败：' + err.message, 'error');
+        } finally {
+          submitBtn.disabled = false;
+          submitText.innerHTML = '<i class="fa fa-save mr-1"></i>提交新增';
+          loading.classList.add('hidden');
+        }
+      });
+
+      // 新增学员表单
+      document.getElementById('student-add-form')?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const submitBtn = e.submitter;
+        const submitText = document.getElementById('student-submit-text');
+        const loading = document.getElementById('student-loading');
+        
+        submitBtn.disabled = true;
+        submitText.textContent = '提交中...';
+        loading.classList.remove('hidden');
+
+        const formData = new FormData(e.target);
+        
+        // 验证电话格式
+        const phone = formData.get('phone')?.trim();
+        if (phone) {
+          const phoneRegex = /^1[3-9]\d{9}$/;
+          if (!phoneRegex.test(phone)) {
+            showNotification('电话号码必须是11位数字且以1开头', 'error');
+            submitBtn.disabled = false;
+            submitText.innerHTML = '<i class="fa fa-save mr-1"></i>提交新增';
+            loading.classList.add('hidden');
+            return;
+          }
+        }
+        
+        const data = {
+          student_id: Number(formData.get('student_id')),
+          student_name: formData.get('student_name')?.trim(),
+          gender: formData.get('gender') || null,
+          phone: phone || null,
+          course_id: formData.get('course_id') ? Number(formData.get('course_id')) : null
+        };
+
+        try {
+          const res = await window.api.student.add(data);
+          showNotification(res.message);
+          e.target.reset();
+          loadStudentList();
+        } catch (err) {
+          console.error('新增学员失败：', err);
+          showNotification('新增失败：' + err.message, 'error');
+        } finally {
+          submitBtn.disabled = false;
+          submitText.innerHTML = '<i class="fa fa-save mr-1"></i>提交新增';
+          loading.classList.add('hidden');
+        }
+      });
+
+      // 学员充值表单
+      document.getElementById('student-recharge-form')?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        if (currentUser.role !== 'student') return;
+
+        const formData = new FormData(e.target);
+        const amount = Number(formData.get('amount'));
+
+        try {
+          const res = await window.api.student.recharge(amount);
+          showNotification(res.message || '充值成功');
+          e.target.reset();
+          await loadStudentBalance();
+        } catch (err) {
+          console.error('学生充值失败：', err);
+          showNotification('充值失败：' + err.message, 'error');
+        }
+      });
+
+      // 修改表单提交
+      document.getElementById('edit-form')?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const id = Number(document.getElementById('edit-id').value);
+        const type = document.getElementById('edit-type').value;
+        const submitText = document.getElementById('edit-submit-text');
+        const loading = document.getElementById('edit-loading');
+        
+        submitText.textContent = '保存中...';
+        loading.classList.remove('hidden');
+        e.submitter.disabled = true;
+
+        const formData = new FormData(e.target);
+        let res;
+
+        try {
+          if (type === 'course') {
+            const data = {
+              course_name: formData.get('edit_course_name')?.trim(),
+              teacher_id: formData.get('edit_teacher_id') ? Number(formData.get('edit_teacher_id')) : null,
+              price: Number(formData.get('edit_price')),
+              status: formData.get('edit_status'),
+              description: formData.get('edit_description')?.trim() || null
+            };
+            res = await window.api.course.update(id, data);
+            loadCourseList();
+          } else if (type === 'teacher') {
+            // 验证电话格式
+            const phone = formData.get('edit_phone')?.trim();
+            if (phone) {
+              const phoneRegex = /^1[3-9]\d{9}$/;
+              if (!phoneRegex.test(phone)) {
+                showNotification('电话号码必须是11位数字且以1开头', 'error');
+                submitText.textContent = '保存修改';
+                loading.classList.add('hidden');
+                e.submitter.disabled = false;
+                return;
+              }
+            }
+            
+            // 验证邮箱格式
+            const email = formData.get('edit_email')?.trim();
+            if (email) {
+              const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+              if (!emailRegex.test(email)) {
+                showNotification('邮箱格式不正确，请包含@符号', 'error');
+                submitText.textContent = '保存修改';
+                loading.classList.add('hidden');
+                e.submitter.disabled = false;
+                return;
+              }
+            }
+            
+            const data = {
+              teacher_name: formData.get('edit_teacher_name')?.trim(),
+              major: formData.get('edit_major')?.trim() || null,
+              phone: phone || null,
+              email: email || null
+            };
+            res = await window.api.teacher.update(id, data);
+            loadTeacherList();
+          } else if (type === 'student') {
+            // 验证电话格式
+            const phone = formData.get('edit_phone')?.trim();
+            if (phone) {
+              const phoneRegex = /^1[3-9]\d{9}$/;
+              if (!phoneRegex.test(phone)) {
+                showNotification('电话号码必须是11位数字且以1开头', 'error');
+                submitText.textContent = '保存修改';
+                loading.classList.add('hidden');
+                e.submitter.disabled = false;
+                return;
+              }
+            }
+            
+            const data = {
+              student_name: formData.get('edit_student_name')?.trim(),
+              gender: formData.get('edit_gender') || null,
+              phone: phone || null,
+              course_id: formData.get('edit_course_id') ? Number(formData.get('edit_course_id')) : null
+            };
+            res = await window.api.student.update(id, data);
+            loadStudentList();
+          }
+          showNotification(res.message);
+          closeEditModal();
+        } catch (err) {
+          console.error(`修改${type}失败：`, err);
+          showNotification('修改失败：' + err.message, 'error');
+        } finally {
+          submitText.textContent = '保存修改';
+          loading.classList.add('hidden');
+          e.submitter.disabled = false;
+        }
+      });
+    });
+  </script>
+</body>
+</html>
